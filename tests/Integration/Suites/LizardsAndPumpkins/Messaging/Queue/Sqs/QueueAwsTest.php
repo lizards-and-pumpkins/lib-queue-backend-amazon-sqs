@@ -143,7 +143,7 @@ class QueueAwsTest extends TestCase
 
         $this->assertSame(0, $queue->count());
 
-        sleep(2);
+        sleep(3);
 
         $this->assertSame(0, $queue->count());
     }
