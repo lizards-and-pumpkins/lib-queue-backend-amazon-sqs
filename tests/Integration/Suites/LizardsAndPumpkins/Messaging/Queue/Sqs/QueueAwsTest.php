@@ -124,28 +124,22 @@ class QueueAwsTest extends TestCase
 
     public function testMessagesAreDeletedAfterConsume()
     {
-        $queue = new SqsQueue($this->sqsClient, $this->queueUrl, 1);
+        $queue = new SqsQueue($this->sqsClient, $this->queueUrl, 2);
 
         $id = uniqid('lap', true);
         $message = Message::withCurrentTime($id, ['with complex payload'], ['and' => 'some metadata']);
         $queue->add($message);
 
-        $receiver = new class implements MessageReceiver
-        {
-            public function receive(Message $message): void
-            {
-            }
-        };
+        $receiverMock = $this->createMock(MessageReceiver::class);
+        $receiverMock->expects($this->once())->method('receive');
 
         $this->assertSame(1, $queue->count());
 
-        $queue->consume($receiver, 1);
-
-        $this->assertSame(0, $queue->count());
+        $queue->consume($receiverMock, 1);
 
         sleep(3);
 
-        $this->assertSame(0, $queue->count());
+        $queue->consume($receiverMock, 1);
     }
 
     public function testCountMessages(): void
