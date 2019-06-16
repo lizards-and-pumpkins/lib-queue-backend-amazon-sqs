@@ -37,7 +37,8 @@ class SqsQueueTest extends TestCase
     {
         $this->sqsClientMock = $this->getMockBuilder(SqsClient::class)
             ->disableOriginalConstructor()
-            ->setMethods(['sendMessage', 'getQueueAttributes', 'PurgeQueue', 'receiveMessage'])->getMock();
+            ->setMethods(['sendMessage', 'getQueueAttributes', 'PurgeQueue', 'receiveMessage', 'deleteMessage'])
+            ->getMock();
         $this->queue = new SqsQueue($this->sqsClientMock, $this->queueName);
     }
 
@@ -132,25 +133,7 @@ class SqsQueueTest extends TestCase
         $messageReceiver->expects($this->once())->method('receive')->with($this->isInstanceOf(Message::class));
 
         $numberOfMessages = 1;
-        $arguments = [
-            'QueueUrl' => $this->queueName,
-            'WaitTimeSeconds' => 20,
-            'MaxNumberOfMessages' => $numberOfMessages,
-        ];
-
-        $messageBody = Message::withCurrentTime('messageName', ['thisIsThePayload'], ['metadata' => 'is possible!'])
-            ->serialize();
-
-        $messages = $this->createMock(Model::class);
-        $messages->method('get')->with('Messages')->willReturn(
-            $allMessages = [
-                $singleMessage = [
-                    'Body' => $messageBody,
-                ],
-            ]
-        );
-
-        $this->sqsClientMock->expects($this->once())->method('receiveMessage')->with($arguments)->willReturn($messages);
+        $this->prepareReceiveMessages($numberOfMessages);
 
         $this->queue->consume($messageReceiver, $numberOfMessages);
     }
@@ -162,27 +145,9 @@ class SqsQueueTest extends TestCase
         $messageReceiver->expects($this->once())->method('receive')->with($this->isInstanceOf(Message::class));
 
         $numberOfMessages = 10;
+        $this->prepareReceiveMessages($numberOfMessages);
+
         $moreThanTenMessages = 15;
-        $arguments = [
-            'QueueUrl' => $this->queueName,
-            'WaitTimeSeconds' => 20,
-            'MaxNumberOfMessages' => $numberOfMessages,
-        ];
-
-        $messageBody = Message::withCurrentTime('messageName', ['thisIsThePayload'], ['metadata' => 'is possible!'])
-            ->serialize();
-
-        $messages = $this->createMock(Model::class);
-        $messages->method('get')->with('Messages')->willReturn(
-            $allMessages = [
-                $singleMessage = [
-                    'Body' => $messageBody,
-                ],
-            ]
-        );
-
-        $this->sqsClientMock->expects($this->once())->method('receiveMessage')->with($arguments)->willReturn($messages);
-
         $this->queue->consume($messageReceiver, $moreThanTenMessages);
     }
 
@@ -209,5 +174,46 @@ class SqsQueueTest extends TestCase
         $this->sqsClientMock->expects($this->once())->method('receiveMessage')->willReturn($messages);
 
         $this->queue->consume($messageReceiver, 1);
+    }
+
+    public function testMessageIsDeletedAfterConsume()
+    {
+        /** @var MessageReceiver|MockObject $messageReceiver */
+        $messageReceiver = $this->createMock(MessageReceiver::class);
+
+        $numberOfMessages = 1;
+
+        $this->prepareReceiveMessages($numberOfMessages);
+
+        $this->sqsClientMock->expects($this->once())->method('deleteMessage');
+
+        $this->queue->consume($messageReceiver, $numberOfMessages);
+    }
+
+    /**
+     * @param int $numberOfMessages
+     */
+    private function prepareReceiveMessages(int $numberOfMessages): void
+    {
+        $arguments = [
+            'QueueUrl' => $this->queueName,
+            'WaitTimeSeconds' => 20,
+            'MaxNumberOfMessages' => $numberOfMessages,
+        ];
+
+        $messageBody = Message::withCurrentTime('messageName', ['thisIsThePayload'], ['metadata' => 'is possible!'])
+            ->serialize();
+
+        $messages = $this->createMock(Model::class);
+        $messages->method('get')->with('Messages')->willReturn(
+            $allMessages = [
+                $singleMessage = [
+                    'Body' => $messageBody,
+                    'ReceiptHandle' => uniqid('lap-test', true),
+                ],
+            ]
+        );
+
+        $this->sqsClientMock->expects($this->once())->method('receiveMessage')->with($arguments)->willReturn($messages);
     }
 }

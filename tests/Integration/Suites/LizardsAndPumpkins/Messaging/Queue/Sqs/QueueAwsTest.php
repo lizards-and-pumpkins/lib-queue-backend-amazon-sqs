@@ -122,6 +122,26 @@ class QueueAwsTest extends TestCase
         $this->assertLessThanOrEqual(10, count($receiver->messages));
     }
 
+    public function testMessagesAreDeletedAfterConsume()
+    {
+        $queue = new SqsQueue($this->sqsClient, $this->queueUrl, 2);
+
+        $id = uniqid('lap', true);
+        $message = Message::withCurrentTime($id, ['with complex payload'], ['and' => 'some metadata']);
+        $queue->add($message);
+
+        $receiverMock = $this->createMock(MessageReceiver::class);
+        $receiverMock->expects($this->once())->method('receive');
+
+        $this->assertSame(1, $queue->count());
+
+        $queue->consume($receiverMock, 1);
+
+        sleep(3);
+
+        $queue->consume($receiverMock, 1);
+    }
+
     public function testCountMessages(): void
     {
         $count = 4;

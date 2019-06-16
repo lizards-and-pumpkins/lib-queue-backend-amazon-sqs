@@ -25,10 +25,16 @@ class SqsQueue implements Queue, Clearable
      */
     private $queueUrl;
 
-    public function __construct(SqsClient $client, string $queueUrl)
+    /**
+     * @var int
+     */
+    private $waitTimeout;
+
+    public function __construct(SqsClient $client, string $queueUrl, $waitTimeout = 20)
     {
         $this->client = $client;
         $this->queueUrl = $queueUrl;
+        $this->waitTimeout = $waitTimeout;
     }
 
     public function clear(): void
@@ -59,6 +65,11 @@ class SqsQueue implements Queue, Clearable
     {
         every($this->getMessages($numberOfMessagesToConsume), function (array $message) use ($messageReceiver) {
             $messageReceiver->receive(Message::rehydrate($message['Body']));
+
+            $this->client->deleteMessage([
+                'QueueUrl' => $this->queueUrl,
+                'ReceiptHandle' => $message['ReceiptHandle']
+            ]);
         });
     }
 
@@ -74,7 +85,7 @@ class SqsQueue implements Queue, Clearable
 
         $messages = $this->client->receiveMessage([
             'QueueUrl' => $this->queueUrl,
-            'WaitTimeSeconds' => 20,
+            'WaitTimeSeconds' => $this->waitTimeout,
             'MaxNumberOfMessages' => min($numberOfMessagesToConsume, self::MAX_AWS_SQS_CONSUMEABLE),
         ])->get('Messages');
 
